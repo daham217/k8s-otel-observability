@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adot-config
+  namespace: otel-app
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 50
+
+    exporters:
+      awsxray:
+        region: eu-north-1
+      awscloudwatchlogs:
+        region: eu-north-1
+        log_group_name: /otel-app/logs
+        log_stream_name: otel-app-stream
+      awsemf:
+        region: eu-north-1
+        namespace: OtelApp/Metrics
+        log_group_name: /otel-app/metrics
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [awsxray]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [awscloudwatchlogs]
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [awsemf]

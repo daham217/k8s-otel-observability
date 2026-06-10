@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-app
+  namespace: otel-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-app
+  template:
+    metadata:
+      labels:
+        app: otel-app
+    spec:
+      containers:
+        - name: nextjs-app
+          image: otel-app:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://localhost:4318"
+            - name: OTEL_SERVICE_NAME
+              value: "otel-app"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "otlp"
+            - name: NODE_ENV
+              value: "production"
+
+        - name: adot-collector
+          image: amazon/aws-otel-collector:latest
+          args: ["--config=/conf/collector.yaml"]
+          ports:
+            - containerPort: 4317
+            - containerPort: 4318
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: aws_access_key_id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: aws_secret_access_key
+            - name: AWS_REGION
+              value: "eu-north-1"
+          volumeMounts:
+            - name: adot-config
+              mountPath: /conf
+      volumes:
+        - name: adot-config
+          configMap:
+            name: adot-config
