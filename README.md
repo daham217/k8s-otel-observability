@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# k8s-otel-observability
 
-## Getting Started
+A Next.js application instrumented with OpenTelemetry and deployed on Minikube. The AWS Distro for OpenTelemetry (ADOT) collector runs as a sidecar container routing telemetry to AWS observability services.
 
-First, run the development server:
+## Architecture
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Browser → [otel-app-service :30300] → Pod
+                                        ├── Next.js App (:3000)
+                                        └── ADOT Collector (:4318)
+                                                ├── Traces ──► AWS X-Ray
+                                                ├── Logs ────► X-Ray trace metadata
+                                                └── Metrics ─► CloudWatch Metrics
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- App — Next.js 16 + TypeScript
+- Instrumentation — @vercel/otel, @opentelemetry/sdk-node
+- Collector — AWS Distro for OpenTelemetry (ADOT) sidecar
+- Tracing — AWS X-Ray
+- Metrics — AWS CloudWatch (EMF)
+- Orchestration — Kubernetes (Minikube)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## API Routes
 
-## Learn More
+| Route | Purpose | AWS Destination |
+|---|---|---|
+| /api/logs | Emits log via span event | X-Ray trace metadata |
+| /api/traces | Creates parent + child spans | X-Ray trace map |
+| /api/metrics | Increments custom counter | CloudWatch Metrics |
 
-To learn more about Next.js, take a look at the following resources:
+## Project Structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+app/api/
+├── logs/route.ts
+├── traces/route.ts
+└── metrics/route.ts
+instrumentation.ts
+next.config.ts
+Dockerfile
+k8s/
+├── namespace.yaml
+├── configmap.yaml
+├── deployment.yaml
+└── service.yaml
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Running Locally
 
-## Deploy on Vercel
+minikube start
+eval $(minikube docker-env)
+docker build -t otel-app:latest .
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+minikube service otel-app-service -n otel-app
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Hit /api/logs, /api/traces, /api/metrics and check AWS Console for telemetry.
